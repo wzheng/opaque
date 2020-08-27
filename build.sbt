@@ -317,30 +317,31 @@ synthTestDataTask := {
   val tpcdsDataFiles =
     for {
       name <- Seq(
-        "store_sales.dat",
-        "store_returns.dat",
-        "catalog_sales.dat",
-        "catalog_returns.dat",
-        "web_sales.dat",
-        "web_returns.dat",
-        "inventory.dat",
-        "store.dat",
         "call_center.dat",
         "catalog_page.dat",
-        "web_site.dat",
-        "web_page.dat",
-        "warehouse.dat",
+        "catalog_returns.dat",
+        "catalog_sales.dat",
         "customer.dat",
         "customer_address.dat",
         "customer_demographics.dat",
-        "date_dim..dat",
-        "household.demographics.dat",
-        "item.dat",
+        "date_dim.dat",
+        "dbgen_version.dat",
+        "household_demographics.dat",
         "income_band.dat",
+        "inventory.dat",
+        "item.dat",
         "promotion.dat",
         "reason.dat",
         "ship_mode.dat",
-        "time_dim.dat"
+        "store.dat",
+        "store_returns.dat",
+        "store_sales.dat",
+        "time_dim.dat",
+        "warehouse.dat",
+        "web_page.dat",
+        "web_returns.dat",
+        "web_sales.dat",
+        "web_site.dat"
       )
     } yield new File(tpcdsDir, name)
 

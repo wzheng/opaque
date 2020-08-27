@@ -628,6 +628,14 @@ trait OpaqueOperatorTests extends FunSuite with BeforeAndAfterAll { self =>
     BigDataBenchmark.q3(spark, securityLevel, "tiny", numPartitions).collect
   }
 
+  testAgainstSpark("big data 3 with limit") { securityLevel =>
+    BigDataBenchmark.q3Limit(spark, securityLevel, "tiny", numPartitions).collect
+  }
+
+  testAgainstSpark("TPC-DS 3") { securityLevel =>
+    TPCDS.tpcds3(spark.sqlContext, securityLevel, numPartitions).collect
+  }
+
   def makeDF[A <: Product : scala.reflect.ClassTag : scala.reflect.runtime.universe.TypeTag](
     data: Seq[A], securityLevel: SecurityLevel, columnNames: String*): DataFrame =
     securityLevel.applyTo(

@@ -216,8 +216,8 @@ object TPCDS {
     "item" ->
       """
         |`i_item_sk` INT, `i_item_id` STRING, `i_rec_start_date` DATE,
-        |`i_rec_end_date` DATE, `i_item_desc` STRING, `i_current_price` DECIMAL(7,2),
-        |`i_wholesale_cost` DECIMAL(7,2), `i_brand_id` INT, `i_brand` STRING, `i_class_id` INT,
+        |`i_rec_end_date` DATE, `i_item_desc` STRING, `i_current_price` FLOAT,
+        |`i_wholesale_cost` FLOAT, `i_brand_id` INT, `i_brand` STRING, `i_class_id` INT,
         |`i_class` STRING, `i_category_id` INT, `i_category` STRING, `i_manufact_id` INT,
         |`i_manufact` STRING, `i_size` STRING, `i_formulation` STRING, `i_color` STRING,
         |`i_units` STRING, `i_container` STRING, `i_manager_id` INT, `i_product_name` STRING
@@ -279,23 +279,29 @@ object TPCDS {
     val date_dim_df = spark.sql("""SELECT * FROM date_dim""".stripMargin).repartition(numPartitions).encrypted
     val store_sales_df = spark.sql(s"""SELECT * FROM store_sales""".stripMargin).repartition(numPartitions).encrypted
     val item_df = spark.sql(s"""SELECT * FROM item""".stripMargin).repartition(numPartitions).encrypted
-    (date_dim_df, store_sales_df, item_df)
+
+    date_dim_df.createOrReplaceTempView("date_dim_enc")
+    store_sales_df.createOrReplaceTempView("store_sales_enc")
+    item_df.createOrReplaceTempView("item_enc")
   }
 
-  /** TPC-DS query 1 **/
-   def tpcds1(
+  private def clearTables(spark: SparkSession) {
+    for (tableName <- tableNames) {
+      spark.sql(s"""DROP TABLE IF EXISTS default.${tableName}""".stripMargin)
+    }
+    spark.catalog.dropGlobalTempView("date_dim_enc")
+    spark.catalog.dropGlobalTempView("store_sales_enc")
+    spark.catalog.dropGlobalTempView("store_sales_enc")
+  }
+
+  /** TPC-DS query 3 **/
+   def tpcds3(
        sqlContext: SQLContext,
        securityLevel: SecurityLevel,
-       size: String,
-       numPartitions: Int,
-       quantityThreshold: Option[Int] = None) : DataFrame = {
+       numPartitions: Int) : DataFrame = {
      import sqlContext.implicits._
-     val (date_dim_df, store_sales_df, item_df) = init(sqlContext, numPartitions)
 
-     date_dim_df.createOrReplaceTempView("date_dim_enc")
-     store_sales_df.createOrReplaceTempView("store_sales_enc")
-     item_df.createOrReplaceTempView("item_enc")
-
+     init(sqlContext, numPartitions)
      val result = sqlContext.sparkSession.sql("""|SELECT
                                                  |  dt.d_year,
                                                  |  item_enc.i_brand_id brand_id,
@@ -307,8 +313,9 @@ object TPCDS {
                                                  |  AND item_enc.i_manufact_id = 128
                                                  |  AND dt.d_moy = 11
                                                  |GROUP BY dt.d_year, item_enc.i_brand, item_enc.i_brand_id
-                                                 |ORDER BY dt.d_year, sum_agg DESC, brand_id""".stripMargin)
-     result.show()
+                                                 |ORDER BY dt.d_year, sum_agg DESC, brand_id
+                                                 |LIMIT 100 """.stripMargin)
+     clearTables(sqlContext.sparkSession)
      result
    }
 }
