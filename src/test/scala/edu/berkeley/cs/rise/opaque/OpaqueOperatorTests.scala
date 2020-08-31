@@ -91,6 +91,18 @@ trait OpaqueOperatorTests extends FunSuite with BeforeAndAfterAll { self =>
     }
   }
 
+  def testAndTimeAgainstSpark[A : Equality](name: String)(f: SecurityLevel => A): Unit = {
+    test(name + " - encrypted") {
+      val ret_enc = Utils.time("Encrypted execution time") {
+        f(Encrypted)
+      }
+      val ret_spark = Utils.time("Spark execution time") {
+        f(Insecure)
+      }
+      assert(ret_enc === ret_spark)
+    }
+  }
+
   def testOpaqueOnly(name: String)(f: SecurityLevel => Unit): Unit = {
     test(name + " - encrypted") {
       f(Encrypted)
@@ -632,7 +644,7 @@ trait OpaqueOperatorTests extends FunSuite with BeforeAndAfterAll { self =>
     BigDataBenchmark.q3Limit(spark, securityLevel, "tiny", numPartitions).collect
   }
 
-  testAgainstSpark("TPC-DS 3") { securityLevel =>
+  testAndTimeAgainstSpark("TPC-DS 3") { securityLevel =>
     TPCDS.tpcds3(spark.sqlContext, securityLevel, numPartitions).collect
   }
 

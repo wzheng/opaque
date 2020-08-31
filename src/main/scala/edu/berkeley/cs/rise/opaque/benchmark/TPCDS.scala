@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 
 object TPCDS {
 
-  // Taken from https://github.com/apache/spark/blob/master/sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala
+  // Taken from https://github.com/apache/spark/blob/master/sql/core/src/test/scala/org/apache/spark/sql/TPCDSBase.scala
   // Decimal modified to FLOAT
 
   private val tableColumns = Map(
@@ -267,55 +267,89 @@ object TPCDS {
        """.stripMargin)
   }
 
-  private def init(sqlContext: SQLContext, numPartitions: Int) = {
+  private def init(sqlContext: SQLContext, numPartitions: Int, securityLevel: SecurityLevel) = {
     import edu.berkeley.cs.rise.opaque.implicits._
     val spark = sqlContext.sparkSession
+
     val path = s"${Benchmark.dataDir}/tpcds/data/"
     for (tableName <- tableNames) {
       if (tableName == "date_dim" || tableName == "store_sales" || tableName == "item") {
         createTable(spark, tableName, format="csv", options=Seq(s"""OPTIONS (path "${path}${tableName}.dat")"""))
       }
     }
-    val date_dim_df = spark.sql("""SELECT * FROM date_dim""".stripMargin).repartition(numPartitions).encrypted
-    val store_sales_df = spark.sql(s"""SELECT * FROM store_sales""".stripMargin).repartition(numPartitions).encrypted
-    val item_df = spark.sql(s"""SELECT * FROM item""".stripMargin).repartition(numPartitions).encrypted
 
-    date_dim_df.createOrReplaceTempView("date_dim_enc")
-    store_sales_df.createOrReplaceTempView("store_sales_enc")
-    item_df.createOrReplaceTempView("item_enc")
+    securityLevel match {
+      case Encrypted => {
+        val date_dim_df = spark.sql("""SELECT * FROM date_dim""".stripMargin).repartition(numPartitions).encrypted
+        val store_sales_df = spark.sql(s"""SELECT * FROM store_sales""".stripMargin).repartition(numPartitions).encrypted
+        val item_df = spark.sql(s"""SELECT * FROM item""".stripMargin).repartition(numPartitions).encrypted
+
+        date_dim_df.createOrReplaceTempView("date_dim_enc")
+        store_sales_df.createOrReplaceTempView("store_sales_enc")
+        item_df.createOrReplaceTempView("item_enc")
+      }
+
+      case Insecure => {}
+    }
   }
 
-  private def clearTables(spark: SparkSession) {
+  private def clearTables(spark: SparkSession, securityLevel: SecurityLevel) = {
     for (tableName <- tableNames) {
       spark.sql(s"""DROP TABLE IF EXISTS default.${tableName}""".stripMargin)
     }
-    spark.catalog.dropGlobalTempView("date_dim_enc")
-    spark.catalog.dropGlobalTempView("store_sales_enc")
-    spark.catalog.dropGlobalTempView("store_sales_enc")
+
+    securityLevel match {
+      case Encrypted => {
+        spark.catalog.dropGlobalTempView("date_dim_enc")
+        spark.catalog.dropGlobalTempView("store_sales_enc")
+        spark.catalog.dropGlobalTempView("store_sales_enc")
+      }
+      case Insecure => {}
+    }
   }
 
-  /** TPC-DS query 3 **/
-   def tpcds3(
-       sqlContext: SQLContext,
-       securityLevel: SecurityLevel,
-       numPartitions: Int) : DataFrame = {
-     import sqlContext.implicits._
+  def tpcdsQuery3(securityLevel: SecurityLevel) : String = {
+    val (date_dim, store_sales, item) = securityLevel match {
+      case Insecure => {
+        ("date_dim", "store_sales", "item")
+      }
+      case Encrypted => {
+        ("date_dim_enc", "store_sales_enc", "item_enc")
+      }
+    }
 
-     init(sqlContext, numPartitions)
-     val result = sqlContext.sparkSession.sql("""|SELECT
-                                                 |  dt.d_year,
-                                                 |  item_enc.i_brand_id brand_id,
-                                                 |  item_enc.i_brand brand,
-                                                 |  SUM(ss_ext_sales_price) sum_agg
-                                                 |FROM date_dim_enc dt, store_sales_enc, item_enc
-                                                 |WHERE dt.d_date_sk = store_sales_enc.ss_sold_date_sk
-                                                 |  AND store_sales_enc.ss_item_sk = item_enc.i_item_sk
-                                                 |  AND item_enc.i_manufact_id = 128
-                                                 |  AND dt.d_moy = 11
-                                                 |GROUP BY dt.d_year, item_enc.i_brand, item_enc.i_brand_id
-                                                 |ORDER BY dt.d_year, sum_agg DESC, brand_id
-                                                 |LIMIT 100 """.stripMargin)
-     clearTables(sqlContext.sparkSession)
-     result
-   }
+    val queryStr = s"""|SELECT
+                       |  dt.d_year,
+                       |  it.i_brand_id brand_id,
+                       |  it.i_brand brand,
+                       |  SUM(ss_ext_sales_price) sum_agg
+                       |FROM ${date_dim} dt, ${store_sales} ss, ${item} it
+                       |WHERE dt.d_date_sk = ss.ss_sold_date_sk
+                       |  AND ss.ss_item_sk = it.i_item_sk
+                       |  AND it.i_manufact_id = 128
+                       |  AND dt.d_moy = 11
+                       |GROUP BY dt.d_year, it.i_brand, it.i_brand_id
+                       |ORDER BY dt.d_year, sum_agg DESC, brand_id
+                       |LIMIT 100 """
+    queryStr.stripMargin
+  }
+
+  /** List of Queries taken from https://github.com/apache/spark/tree/master/sql/core/src/test/resources/tpcds **/
+  def tpcds3(
+    sqlContext: SQLContext,
+    securityLevel: SecurityLevel,
+    numPartitions: Int) : DataFrame = {
+    import sqlContext.implicits._
+
+    val securityType = securityLevel match {
+      case Insecure => "Spark"
+      case Encrypted => "Encrypted"
+    }
+
+    init(sqlContext, numPartitions, securityLevel)
+    val sqlStr = tpcdsQuery3(securityLevel)
+    val result = sqlContext.sparkSession.sql(sqlStr)
+    clearTables(sqlContext.sparkSession, securityLevel)
+    result
+  }
 }

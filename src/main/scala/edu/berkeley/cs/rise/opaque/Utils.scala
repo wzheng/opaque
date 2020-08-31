@@ -116,7 +116,7 @@ object Utils extends Logging {
     val start = System.nanoTime
     val result = f
     if (perf) {
-      logInfo(s"$desc: ${(System.nanoTime - start) / 1000000.0} ms")
+      logWarning(s"$desc: ${(System.nanoTime - start) / 1000000.0} ms")
     }
     result
   }
