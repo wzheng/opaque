@@ -37,12 +37,12 @@ object TPCDS {
         |`ss_sold_date_sk` INT, `ss_sold_time_sk` INT, `ss_item_sk` INT, `ss_customer_sk` INT,
         |`ss_cdemo_sk` INT, `ss_hdemo_sk` INT, `ss_addr_sk` INT, `ss_store_sk` INT,
         |`ss_promo_sk` INT, `ss_ticket_number` INT, `ss_quantity` INT,
-        |`ss_wholesale_cost` FLOAT,
-        |`ss_sales_price` FLOAT,
-        |`ss_ext_sales_price` FLOAT,
-        |`ss_ext_list_price` FLOAT,
-        |`ss_coupon_amt` FLOAT,
-        |`ss_net_paid_inc_tax` FLOAT
+        |`ss_wholesale_cost` FLOAT, `ss_list_price` FLOAT,
+        |`ss_sales_price` FLOAT, `ss_ext_discount_amt` FLOAT,
+        |`ss_ext_sales_price` FLOAT, `ss_ext_wholesale_cost` FLOAT,
+        |`ss_ext_list_price` FLOAT, `ss_ext_tax` FLOAT,
+        |`ss_coupon_amt` FLOAT, `ss_net_paid` FLOAT,
+        |`ss_net_paid_inc_tax` FLOAT, `ss_net_profit` FLOAT
       """.stripMargin,
     "store_returns" ->
       """
@@ -307,66 +307,74 @@ object TPCDS {
   }
 
   def tpcdsQuery(queryNumber: Int, securityLevel: SecurityLevel) : String = {
-    queryNumber match {
-      case 1 => {
-        val (store_returns, date_dim, store, customer) = securityLevel match {
-          case Insecure => {
-            ("store_returns", "date_dim", "store", "customer")
-          }
-          case Encrypted => {
-            ("store_returns_enc", "date_dim_enc", "store_enc", "customer_enc")
-          }
-        }
+    val isEnc = securityLevel match {
+      case Insecure => ""
+      case Encrypted => "_enc"
+    }
 
-        val queryStr = s"""|WITH customer_total_return AS
-                           |( SELECT
-                           |    sr_customer_sk AS ctr_customer_sk,
-                           |    sr_store_sk AS ctr_store_sk,
-                           |    sum(sr_return_amt) AS ctr_total_return
-                           |  FROM ${store_returns} ss, ${date_dim} dt
-                           |  WHERE sr_returned_date_sk = d_date_sk AND d_year = 2000
-                           |  GROUP BY sr_customer_sk, sr_store_sk)
-                           |SELECT c_customer_id
-                           |FROM customer_total_return ctr1, ${store} s, ${customer} c
-                           |WHERE ctr1.ctr_total_return >
-                           |  (SELECT avg(ctr_total_return) * 1.2
-                           |  FROM customer_total_return ctr2
-                           |  WHERE ctr1.ctr_store_sk = ctr2.ctr_store_sk)
-                           |  AND s_store_sk = ctr1.ctr_store_sk
-                           |  AND s_state = 'TN'
-                           |  AND ctr1.ctr_customer_sk = c_customer_sk
-                           |ORDER BY c_customer_id
-                           |LIMIT 100"""
-        
-        queryStr.stripMargin
+    val queryStr = queryNumber match {
+      case 1 => {
+        s"""|WITH customer_total_return AS
+            |( SELECT
+            |    sr_customer_sk AS ctr_customer_sk,
+            |    sr_store_sk AS ctr_store_sk,
+            |    sum(sr_return_amt) AS ctr_total_return
+            |  FROM store_returns${isEnc} ss, date_dim${isEnc} dt
+            |  WHERE sr_returned_date_sk = d_date_sk AND d_year = 2000
+            |  GROUP BY sr_customer_sk, sr_store_sk)
+            |SELECT c_customer_id
+            |FROM customer_total_return ctr1, store${isEnc} s, customer${isEnc} c
+            |WHERE ctr1.ctr_total_return >
+            |  (SELECT avg(ctr_total_return) * 1.2
+            |  FROM customer_total_return ctr2
+            |  WHERE ctr1.ctr_store_sk = ctr2.ctr_store_sk)
+            |  AND s_store_sk = ctr1.ctr_store_sk
+            |  AND s_state = 'TN'
+            |  AND ctr1.ctr_customer_sk = c_customer_sk
+            |ORDER BY c_customer_id
+            |LIMIT 100"""
       }
 
       case 3 => {
-        val (date_dim, store_sales, item) = securityLevel match {
-          case Insecure => {
-            ("date_dim", "store_sales", "item")
-          }
-          case Encrypted => {
-            ("date_dim_enc", "store_sales_enc", "item_enc")
-          }
-        }
+        s"""|SELECT
+            |  dt.d_year,
+            |  it.i_brand_id brand_id,
+            |  it.i_brand brand,
+            |  SUM(ss_ext_sales_price) sum_agg
+            |FROM date_dim${isEnc} dt, store_sales${isEnc} ss, item${isEnc} it
+            |WHERE dt.d_date_sk = ss.ss_sold_date_sk
+            |  AND ss.ss_item_sk = it.i_item_sk
+            |  AND it.i_manufact_id = 128
+            |  AND dt.d_moy = 11
+            |GROUP BY dt.d_year, it.i_brand, it.i_brand_id
+            |ORDER BY dt.d_year, sum_agg DESC, brand_id
+            |LIMIT 100 """
+      }
 
-        val queryStr = s"""|SELECT
-                           |  dt.d_year,
-                           |  it.i_brand_id brand_id,
-                           |  it.i_brand brand,
-                           |  SUM(ss_ext_sales_price) sum_agg
-                           |FROM ${date_dim} dt, ${store_sales} ss, ${item} it
-                           |WHERE dt.d_date_sk = ss.ss_sold_date_sk
-                           |  AND ss.ss_item_sk = it.i_item_sk
-                           |  AND it.i_manufact_id = 128
-                           |  AND dt.d_moy = 11
-                           |GROUP BY dt.d_year, it.i_brand, it.i_brand_id
-                           |ORDER BY dt.d_year, sum_agg DESC, brand_id
-                           |LIMIT 100 """
-        queryStr.stripMargin
+      case 7 => {
+        s"""|SELECT
+            |  i_item_id,
+            |  avg(ss_quantity) agg1,
+            |  avg(ss_list_price) agg2,
+            |  avg(ss_coupon_amt) agg3,
+            |  avg(ss_sales_price) agg4
+            |FROM store_sales${isEnc}, customer_demographics${isEnc}, date_dim${isEnc}, item${isEnc}, promotion${isEnc}
+            |WHERE ss_sold_date_sk = d_date_sk AND
+            |  ss_item_sk = i_item_sk AND
+            |  ss_cdemo_sk = cd_demo_sk AND
+            |  ss_promo_sk = p_promo_sk AND
+            |  cd_gender = 'M' AND
+            |  cd_marital_status = 'S' AND
+            |  cd_education_status = 'College' AND
+            |  (p_channel_email = 'N' OR p_channel_event = 'N') AND
+            |  d_year = 2000
+            |GROUP BY i_item_id
+            |ORDER BY i_item_id
+            |LIMIT 100"""
       }
     }
+
+    queryStr.stripMargin
   }
 
   /** List of Queries taken from https://github.com/apache/spark/tree/master/sql/core/src/test/resources/tpcds **/
@@ -380,6 +388,7 @@ object TPCDS {
     val loadTables = queryNumber match {
       case 1 => Seq("store_returns", "date_dim", "store", "customer")
       case 3 => Seq("date_dim", "store_sales", "item")
+      case 7 => Seq("store_sales", "customer_demographics", "date_dim", "item", "promotion")
       case _ => Seq("")
     }
 
