@@ -306,6 +306,7 @@ object TPCDS {
     }
   }
 
+  // SQL queries taken from https://github.com/apache/spark/tree/master/sql/core/src/test/resources/tpcds
   def tpcdsQuery(queryNumber: Int, securityLevel: SecurityLevel) : String = {
     val isEnc = securityLevel match {
       case Insecure => ""
