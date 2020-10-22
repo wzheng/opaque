@@ -191,7 +191,7 @@ object TPCDS {
         |`ca_address_sk` INT, `ca_address_id` STRING, `ca_street_number` STRING,
         |`ca_street_name` STRING, `ca_street_type` STRING, `ca_suite_number` STRING,
         |`ca_city` STRING, `ca_county` STRING, `ca_state` STRING, `ca_zip` STRING,
-        |`ca_country` STRING, `ca_gmt_offset` FLOAT
+        |`ca_country` STRING, `ca_gmt_offset` FLOAT, `ca_location_type` STRING
       """.stripMargin,
     "customer_demographics" ->
       """
@@ -395,6 +395,267 @@ object TPCDS {
             |ORDER BY ext_price DESC, brand, brand_id, i_manufact_id, i_manufact
             |LIMIT 100"""
       }
+
+      case 26 => {
+        s"""|SELECT
+            |  i_item_id,
+            |  avg(cs_quantity) agg1,
+            |  avg(cs_list_price) agg2,
+            |  avg(cs_coupon_amt) agg3,
+            |  avg(cs_sales_price) agg4
+            |FROM catalog_sales${isEnc}, customer_demographics${isEnc}, date_dim${isEnc}, item${isEnc}, promotion${isEnc}
+            |WHERE cs_sold_date_sk = d_date_sk AND
+            |  cs_item_sk = i_item_sk AND
+            |  cs_bill_cdemo_sk = cd_demo_sk AND
+            |  cs_promo_sk = p_promo_sk AND
+            |  cd_gender = 'M' AND
+            |  cd_marital_status = 'S' AND
+            |  cd_education_status = 'College' AND
+            |  (p_channel_email = 'N' OR p_channel_event = 'N') AND
+            |  d_year = 2000
+            |GROUP BY i_item_id
+            |ORDER BY i_item_id
+            |LIMIT 100"""
+      }
+
+      case 28 => {
+        s"""|SELECT *
+            |FROM (SELECT
+            |  avg(ss_list_price) B1_LP,
+            |  count(ss_list_price) B1_CNT,
+            |  count(DISTINCT ss_list_price) B1_CNTD
+            |FROM store_sales${isEnc}
+            |WHERE ss_quantity BETWEEN 0 AND 5
+            |  AND (ss_list_price BETWEEN 8 AND 8 + 10
+            |  OR ss_coupon_amt BETWEEN 459 AND 459 + 1000
+            |  OR ss_wholesale_cost BETWEEN 57 AND 57 + 20)) B1,
+            |  (SELECT
+            |    avg(ss_list_price) B2_LP,
+            |    count(ss_list_price) B2_CNT,
+            |    count(DISTINCT ss_list_price) B2_CNTD
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 6 AND 10
+            |    AND (ss_list_price BETWEEN 90 AND 90 + 10
+            |    OR ss_coupon_amt BETWEEN 2323 AND 2323 + 1000
+            |    OR ss_wholesale_cost BETWEEN 31 AND 31 + 20)) B2,
+            |  (SELECT
+            |    avg(ss_list_price) B3_LP,
+            |    count(ss_list_price) B3_CNT,
+            |    count(DISTINCT ss_list_price) B3_CNTD
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 11 AND 15
+            |    AND (ss_list_price BETWEEN 142 AND 142 + 10
+            |    OR ss_coupon_amt BETWEEN 12214 AND 12214 + 1000
+            |    OR ss_wholesale_cost BETWEEN 79 AND 79 + 20)) B3,
+            |  (SELECT
+            |    avg(ss_list_price) B4_LP,
+            |    count(ss_list_price) B4_CNT,
+            |    count(DISTINCT ss_list_price) B4_CNTD
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 16 AND 20
+            |    AND (ss_list_price BETWEEN 135 AND 135 + 10
+            |    OR ss_coupon_amt BETWEEN 6071 AND 6071 + 1000
+            |    OR ss_wholesale_cost BETWEEN 38 AND 38 + 20)) B4,
+            |  (SELECT
+            |    avg(ss_list_price) B5_LP,
+            |    count(ss_list_price) B5_CNT,
+            |    count(DISTINCT ss_list_price) B5_CNTD
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 21 AND 25
+            |    AND (ss_list_price BETWEEN 122 AND 122 + 10
+            |    OR ss_coupon_amt BETWEEN 836 AND 836 + 1000
+            |    OR ss_wholesale_cost BETWEEN 17 AND 17 + 20)) B5,
+            |  (SELECT
+            |    avg(ss_list_price) B6_LP,
+            |    count(ss_list_price) B6_CNT,
+            |    count(DISTINCT ss_list_price) B6_CNTD
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 26 AND 30
+            |    AND (ss_list_price BETWEEN 154 AND 154 + 10
+            |    OR ss_coupon_amt BETWEEN 7326 AND 7326 + 1000
+            |    OR ss_wholesale_cost BETWEEN 7 AND 7 + 20)) B6
+            |LIMIT 100"""
+      }
+
+      case 81 => {
+        s"""|WITH customer_total_return AS
+            |(SELECT
+            |    cr_returning_customer_sk AS ctr_customer_sk,
+            |    ca_state AS ctr_state,
+            |    sum(cr_return_amt_inc_tax) AS ctr_total_return
+            |  FROM catalog_returns${isEnc}, date_dim${isEnc}, customer_address${isEnc}
+            |  WHERE cr_returned_date_sk = d_date_sk
+            |    AND d_year = 2000
+            |    AND cr_returning_addr_sk = ca_address_sk
+            |  GROUP BY cr_returning_customer_sk, ca_state )
+            |SELECT
+            |  c_customer_id,
+            |  c_salutation,
+            |  c_first_name,
+            |  c_last_name,
+            |  ca_street_number,
+            |  ca_street_name,
+            |  ca_street_type,
+            |  ca_suite_number,
+            |  ca_city,
+            |  ca_county,
+            |  ca_state,
+            |  ca_zip,
+            |  ca_country,
+            |  ca_gmt_offset,
+            |  ca_location_type,
+            |  ctr_total_return
+            |FROM customer_total_return ctr1, customer_address, customer
+            |WHERE ctr1.ctr_total_return > (SELECT avg(ctr_total_return) * 1.2
+            |FROM customer_total_return ctr2
+            |WHERE ctr1.ctr_state = ctr2.ctr_state)
+            |  AND ca_address_sk = c_current_addr_sk
+            |  AND ca_state = 'GA'
+            |  AND ctr1.ctr_customer_sk = c_customer_sk
+            |ORDER BY c_customer_id, c_salutation, c_first_name, c_last_name, ca_street_number, ca_street_name
+            |  , ca_street_type, ca_suite_number, ca_city, ca_county, ca_state, ca_zip, ca_country, ca_gmt_offset
+            |  , ca_location_type, ctr_total_return
+            |LIMIT 100"""
+      }
+
+      case 88 => {
+        s"""|SELECT *
+            |FROM
+            |  (SELECT count(*) h8_30_to_9
+            |  FROM store_sales${isEnc}, household_demographics${isEnc}, time_dim${isEnc}, store${isEnc}
+            |  WHERE ss_sold_time_sk = time_dim${isEnc}.t_time_sk
+            |    AND ss_hdemo_sk = household_demographics${isEnc}.hd_demo_sk
+            |    AND ss_store_sk = s_store_sk
+            |    AND time_dim${isEnc}.t_hour = 8
+            |    AND time_dim${isEnc}.t_minute >= 30
+            |    AND (
+            |    (household_demographics${isEnc}.hd_dep_count = 4 AND household_demographics${isEnc}.hd_vehicle_count <= 4 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 2 AND household_demographics${isEnc}.hd_vehicle_count <= 2 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 0 AND
+            |        household_demographics${isEnc}.hd_vehicle_count <= 0 + 2))
+            |    AND store${isEnc}.s_store_name = 'ese') s1,
+            |  (SELECT count(*) h9_to_9_30
+            |  FROM store_sales${isEnc}, household_demographics${isEnc}, time_dim${isEnc}, store${isEnc}
+            |  WHERE ss_sold_time_sk = time_dim${isEnc}.t_time_sk
+            |    AND ss_hdemo_sk = household_demographics${isEnc}.hd_demo_sk
+            |    AND ss_store_sk = s_store_sk
+            |    AND time_dim${isEnc}.t_hour = 9
+            |    AND time_dim${isEnc}.t_minute < 30
+            |    AND (
+            |    (household_demographics${isEnc}.hd_dep_count = 4 AND household_demographics${isEnc}.hd_vehicle_count <= 4 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 2 AND household_demographics${isEnc}.hd_vehicle_count <= 2 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 0 AND
+            |        household_demographics${isEnc}.hd_vehicle_count <= 0 + 2))
+            |    AND store${isEnc}.s_store_name = 'ese') s2,
+            |  (SELECT count(*) h9_30_to_10
+            |  FROM store_sales${isEnc}, household_demographics${isEnc}, time_dim${isEnc}, store${isEnc}
+            |  WHERE ss_sold_time_sk = time_dim${isEnc}.t_time_sk
+            |    AND ss_hdemo_sk = household_demographics${isEnc}.hd_demo_sk
+            |    AND ss_store_sk = s_store_sk
+            |    AND time_dim${isEnc}.t_hour = 9
+            |    AND time_dim${isEnc}.t_minute >= 30
+            |    AND (
+            |    (household_demographics${isEnc}.hd_dep_count = 4 AND household_demographics${isEnc}.hd_vehicle_count <= 4 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 2 AND household_demographics${isEnc}.hd_vehicle_count <= 2 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 0 AND
+            |        household_demographics${isEnc}.hd_vehicle_count <= 0 + 2))
+            |    AND store${isEnc}.s_store_name = 'ese') s3,
+            |  (SELECT count(*) h10_to_10_30
+            |  FROM store_sales${isEnc}, household_demographics${isEnc}, time_dim${isEnc}, store${isEnc}
+            |  WHERE ss_sold_time_sk = time_dim${isEnc}.t_time_sk
+            |    AND ss_hdemo_sk = household_demographics${isEnc}.hd_demo_sk
+            |    AND ss_store_sk = s_store_sk
+            |    AND time_dim${isEnc}.t_hour = 10
+            |    AND time_dim${isEnc}.t_minute < 30
+            |    AND (
+            |    (household_demographics${isEnc}.hd_dep_count = 4 AND household_demographics${isEnc}.hd_vehicle_count <= 4 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 2 AND household_demographics${isEnc}.hd_vehicle_count <= 2 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 0 AND
+            |        household_demographics${isEnc}.hd_vehicle_count <= 0 + 2))
+            |    AND store${isEnc}.s_store_name = 'ese') s4,
+            |  (SELECT count(*) h10_30_to_11
+            |  FROM store_sales${isEnc}, household_demographics${isEnc}, time_dim${isEnc}, store${isEnc}
+            |  WHERE ss_sold_time_sk = time_dim${isEnc}.t_time_sk
+            |    AND ss_hdemo_sk = household_demographics${isEnc}.hd_demo_sk
+            |    AND ss_store_sk = s_store_sk
+            |    AND time_dim${isEnc}.t_hour = 10
+            |    AND time_dim${isEnc}.t_minute >= 30
+            |    AND (
+            |    (household_demographics${isEnc}.hd_dep_count = 4 AND household_demographics${isEnc}.hd_vehicle_count <= 4 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 2 AND household_demographics${isEnc}.hd_vehicle_count <= 2 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 0 AND
+            |        household_demographics${isEnc}.hd_vehicle_count <= 0 + 2))
+            |    AND store${isEnc}.s_store_name = 'ese') s5,
+            |  (SELECT count(*) h11_to_11_30
+            |  FROM store_sales${isEnc}, household_demographics${isEnc}, time_dim${isEnc}, store${isEnc}
+            |  WHERE ss_sold_time_sk = time_dim${isEnc}.t_time_sk
+            |    AND ss_hdemo_sk = household_demographics${isEnc}.hd_demo_sk
+            |    AND ss_store_sk = s_store_sk
+            |    AND time_dim${isEnc}.t_hour = 11
+            |    AND time_dim${isEnc}.t_minute < 30
+            |    AND (
+            |    (household_demographics${isEnc}.hd_dep_count = 4 AND household_demographics${isEnc}.hd_vehicle_count <= 4 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 2 AND household_demographics${isEnc}.hd_vehicle_count <= 2 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 0 AND
+            |        household_demographics${isEnc}.hd_vehicle_count <= 0 + 2))
+            |    AND store${isEnc}.s_store_name = 'ese') s6,
+            |  (SELECT count(*) h11_30_to_12
+            |  FROM store_sales${isEnc}, household_demographics${isEnc}, time_dim${isEnc}, store${isEnc}
+            |  WHERE ss_sold_time_sk = time_dim${isEnc}.t_time_sk
+            |    AND ss_hdemo_sk = household_demographics${isEnc}.hd_demo_sk
+            |    AND ss_store_sk = s_store_sk
+            |    AND time_dim${isEnc}.t_hour = 11
+            |    AND time_dim${isEnc}.t_minute >= 30
+            |    AND (
+            |    (household_demographics${isEnc}.hd_dep_count = 4 AND household_demographics${isEnc}.hd_vehicle_count <= 4 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 2 AND household_demographics${isEnc}.hd_vehicle_count <= 2 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 0 AND
+            |        household_demographics${isEnc}.hd_vehicle_count <= 0 + 2))
+            |    AND store${isEnc}.s_store_name = 'ese') s7,
+            |  (SELECT count(*) h12_to_12_30
+            |  FROM store_sales${isEnc}, household_demographics${isEnc}, time_dim${isEnc}, store${isEnc}
+            |  WHERE ss_sold_time_sk = time_dim${isEnc}.t_time_sk
+            |    AND ss_hdemo_sk = household_demographics${isEnc}.hd_demo_sk
+            |    AND ss_store_sk = s_store_sk
+            |    AND time_dim${isEnc}.t_hour = 12
+            |    AND time_dim${isEnc}.t_minute < 30
+            |    AND (
+            |    (household_demographics${isEnc}.hd_dep_count = 4 AND household_demographics${isEnc}.hd_vehicle_count <= 4 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 2 AND household_demographics${isEnc}.hd_vehicle_count <= 2 + 2)
+            |      OR
+            |      (household_demographics${isEnc}.hd_dep_count = 0 AND
+            |        household_demographics${isEnc}.hd_vehicle_count <= 0 + 2))
+            |    AND store${isEnc}.s_store_name = 'ese') s8"""
+      }
+
+      case 96 => {
+        s"""|SELECT count(*)
+            |FROM store_sales${isEnc}, household_demographics${isEnc}, time_dim${isEnc}, store${isEnc}
+            |WHERE ss_sold_time_sk = time_dim${isEnc}.t_time_sk
+            |  AND ss_hdemo_sk = household_demographics${isEnc}.hd_demo_sk
+            |  AND ss_store_sk = s_store_sk
+            |  AND time_dim${isEnc}.t_hour = 20
+            |  AND time_dim${isEnc}.t_minute >= 30
+            |  AND household_demographics${isEnc}.hd_dep_count = 7
+            |  AND store${isEnc}.s_store_name = 'ese'
+            |ORDER BY count(*)
+            |LIMIT 100"""
+      }
     }
 
     queryStr.stripMargin
@@ -412,6 +673,12 @@ object TPCDS {
       case 1 => Seq("store_returns", "date_dim", "store", "customer")
       case 3 => Seq("date_dim", "store_sales", "item")
       case 7 => Seq("store_sales", "customer_demographics", "date_dim", "item", "promotion")
+      case 19 => Seq("date_dim", "store_sales", "item", "customer", "customer_address", "store")
+      case 26 => Seq("catalog_sales", "customer_demographics", "date_dim", "item", "promotion")
+      case 28 => Seq("store_sales")
+      case 81 => Seq("catalog_returns", "date_dim", "customer_address", "customer")
+      case 88 => Seq("store_sales", "household_demographics", "time_dim", "store")
+      case 96 => Seq("store_sales", "household_demographics", "time_dim", "store")
       case _ => Seq("")
     }
 
