@@ -269,7 +269,7 @@ object TPCDS {
        """.stripMargin)
   }
 
-  private def init(sqlContext: SQLContext, numPartitions: Int, securityLevel: SecurityLevel, loadTables: Seq[String]) = {
+  def init(sqlContext: SQLContext, numPartitions: Int, securityLevel: SecurityLevel, loadTables: Seq[String]) = {
     import edu.berkeley.cs.rise.opaque.implicits._
     val spark = sqlContext.sparkSession
 
@@ -277,7 +277,6 @@ object TPCDS {
     for (tableName <- loadTables) {
       createTable(spark, tableName, format="csv", options=Seq(s"""OPTIONS (path "${path}${tableName}.dat")"""))
     }
-
     securityLevel match {
       case Encrypted => {
         for (tableName <- loadTables) {
@@ -290,7 +289,7 @@ object TPCDS {
     }
   }
 
-  private def clearTables(spark: SparkSession, securityLevel: SecurityLevel, loadTables: Seq[String]) = {
+  def clearTables(spark: SparkSession, securityLevel: SecurityLevel, loadTables: Seq[String]) = {
     for (tableName <- loadTables) {
       spark.sql(s"""DROP TABLE IF EXISTS default.${tableName}""".stripMargin)
     }
@@ -705,21 +704,13 @@ object TPCDS {
             |  AND store${isEnc}.s_store_name = 'ese'
             |ORDER BY count(*)
             |LIMIT 100"""
-        // ""
       }
     }
 
     queryStr.stripMargin
   }
 
-  /** List of Queries taken from https://github.com/apache/spark/tree/master/sql/core/src/test/resources/tpcds **/
-  def tpcds(
-    queryNumber: Int,
-    sqlContext: SQLContext,
-    securityLevel: SecurityLevel,
-    numPartitions: Int) : Seq[Any] = {
-    import sqlContext.implicits._
-
+  def getLoadTables(queryNumber: Int) : Seq[String] = {
     val loadTables = queryNumber match {
       case 1 => Seq("store_returns", "date_dim", "store", "customer")
       case 3 => Seq("date_dim", "store_sales", "item")
@@ -734,21 +725,47 @@ object TPCDS {
       case _ => Seq("")
     }
 
-    val secType = securityLevel match {
-      case Insecure => "Spark"
-      case Encrypted => "Encrypted"
-    }
+    loadTables
+  }
 
+  def tpcdsClear(
+    queryNumber: Int,
+    sqlContext: SQLContext,
+    securityLevel: SecurityLevel,
+    numPartitions: Int) = {
+
+    val loadTables = getLoadTables(queryNumber)
+    clearTables(sqlContext.sparkSession, securityLevel, loadTables)
+  }
+
+  def tpcdsLoad(
+    queryNumber: Int,
+    sqlContext: SQLContext,
+    securityLevel: SecurityLevel,
+    numPartitions: Int) : String = {
+    import sqlContext.implicits._
+
+    val loadTables = getLoadTables(queryNumber)
     init(sqlContext, numPartitions, securityLevel, loadTables)
-    val sqlStr = tpcdsQuery(queryNumber, securityLevel)
+    tpcdsQuery(queryNumber, securityLevel)
+  }
+
+  /** List of Queries taken from https://github.com/apache/spark/tree/master/sql/core/src/test/resources/tpcds **/
+  def tpcds(
+    queryNumber: Int,
+    sqlContext: SQLContext,
+    securityLevel: SecurityLevel,
+    numPartitions: Int) : Seq[Any] = {
+    import sqlContext.implicits._
+
+    val sqlStr = tpcdsLoad(queryNumber, sqlContext, securityLevel, numPartitions)
 
     val df = sqlContext.sparkSession.sql(sqlStr)
-    // df.explain(true)
-    df.show()
-    //val result = df.collect
-    val result = Seq(0)
+    df.explain(true)
+    val result = df.collect
 
-    clearTables(sqlContext.sparkSession, securityLevel, loadTables)
+    tpcdsClear(queryNumber, sqlContext, securityLevel, numPartitions)
     result
   }
+
 }
