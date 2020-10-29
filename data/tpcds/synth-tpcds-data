@@ -12,12 +12,12 @@ mkdir -p $SPARKSGX_DATA_DIR/tpcds/data/
 ./dsdgen -SCALE 1 -DELIMITER , -DIR $SPARKSGX_DATA_DIR/tpcds/data/ -FORCE
 chmod u+r $SPARKSGX_DATA_DIR/tpcds/data/*.dat
 
-# Go through all of the files and manually reduce by 10x
+# Go through all of the files and manually reduce size
 FILES=$SPARKSGX_DATA_DIR/tpcds/data/*.dat
 for f in $FILES
 do
     cp $f $f.copy
-    sed -n '1p;0~5p' $f.copy > $f
+    sed -n '1p;0~10p' $f.copy > $f
     rm $f.copy
 done
 

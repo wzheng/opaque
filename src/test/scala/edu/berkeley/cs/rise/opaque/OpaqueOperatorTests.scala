@@ -833,6 +833,10 @@ trait OpaqueOperatorTests extends FunSuite with BeforeAndAfterAll { self =>
     TPCDS.tpcds(7, spark.sqlContext, securityLevel, numPartitions)
   }
 
+  ignoreTestAgainstSpark("TPC-DS 9") { securityLevel =>
+    TPCDS.tpcds(9, spark.sqlContext, securityLevel, numPartitions)
+  }
+
   ignoreTestAgainstSpark("TPC-DS 19") { securityLevel =>
     TPCDS.tpcds(19, spark.sqlContext, securityLevel, numPartitions)
   }

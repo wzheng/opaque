@@ -283,7 +283,6 @@ object TPCDS {
         for (tableName <- loadTables) {
           val df = spark.sql(s"""SELECT * FROM ${tableName}""".stripMargin).repartition(numPartitions).encrypted
           df.createOrReplaceTempView(s"""${tableName}_enc""")
-          df.cache()
         }
       }
 
@@ -372,6 +371,57 @@ object TPCDS {
             |GROUP BY i_item_id
             |ORDER BY i_item_id
             |LIMIT 100"""
+      }
+
+      case 9 => {
+        s"""|SELECT
+            |  CASE WHEN (SELECT count(*)
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 1 AND 20) > 62316685
+            |    THEN (SELECT avg(ss_ext_discount_amt)
+            |    FROM store_sales${isEnc}
+            |    WHERE ss_quantity BETWEEN 1 AND 20)
+            |  ELSE (SELECT avg(ss_net_paid)
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 1 AND 20) END bucket1,
+            |  CASE WHEN (SELECT count(*)
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 21 AND 40) > 19045798
+            |    THEN (SELECT avg(ss_ext_discount_amt)
+            |    FROM store_sales${isEnc}
+            |    WHERE ss_quantity BETWEEN 21 AND 40)
+            |  ELSE (SELECT avg(ss_net_paid)
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 21 AND 40) END bucket2,
+            |  CASE WHEN (SELECT count(*)
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 41 AND 60) > 365541424
+            |    THEN (SELECT avg(ss_ext_discount_amt)
+            |    FROM store_sales${isEnc}
+            |    WHERE ss_quantity BETWEEN 41 AND 60)
+            |  ELSE (SELECT avg(ss_net_paid)
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 41 AND 60) END bucket3,
+            |  CASE WHEN (SELECT count(*)
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 61 AND 80) > 216357808
+            |    THEN (SELECT avg(ss_ext_discount_amt)
+            |    FROM store_sales${isEnc}
+            |    WHERE ss_quantity BETWEEN 61 AND 80)
+            |  ELSE (SELECT avg(ss_net_paid)
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 61 AND 80) END bucket4,
+            |  CASE WHEN (SELECT count(*)
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 81 AND 100) > 184483884
+            |    THEN (SELECT avg(ss_ext_discount_amt)
+            |    FROM store_sales${isEnc}
+            |    WHERE ss_quantity BETWEEN 81 AND 100)
+            |  ELSE (SELECT avg(ss_net_paid)
+            |  FROM store_sales${isEnc}
+            |  WHERE ss_quantity BETWEEN 81 AND 100) END bucket5
+            |FROM reason${isEnc}
+            |WHERE r_reason_sk = 1"""
       }
 
       case 19 => {
@@ -655,6 +705,7 @@ object TPCDS {
             |  AND store${isEnc}.s_store_name = 'ese'
             |ORDER BY count(*)
             |LIMIT 100"""
+        // ""
       }
     }
 
@@ -673,6 +724,7 @@ object TPCDS {
       case 1 => Seq("store_returns", "date_dim", "store", "customer")
       case 3 => Seq("date_dim", "store_sales", "item")
       case 7 => Seq("store_sales", "customer_demographics", "date_dim", "item", "promotion")
+      case 9 => Seq("store_sales", "reason")
       case 19 => Seq("date_dim", "store_sales", "item", "customer", "customer_address", "store")
       case 26 => Seq("catalog_sales", "customer_demographics", "date_dim", "item", "promotion")
       case 28 => Seq("store_sales")
@@ -690,9 +742,11 @@ object TPCDS {
     init(sqlContext, numPartitions, securityLevel, loadTables)
     val sqlStr = tpcdsQuery(queryNumber, securityLevel)
 
-    val result = Utils.time(s"""${secType}""") {
-      sqlContext.sparkSession.sql(sqlStr).collect
-    }
+    val df = sqlContext.sparkSession.sql(sqlStr)
+    // df.explain(true)
+    df.show()
+    //val result = df.collect
+    val result = Seq(0)
 
     clearTables(sqlContext.sparkSession, securityLevel, loadTables)
     result
